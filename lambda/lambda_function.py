@@ -14,6 +14,11 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from ask_sdk_model import Response
 
+import pandas as pd
+import requests
+import io
+import calendar
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -43,19 +48,38 @@ class CaptureZodiacSignIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return ask_utils.is_intent_name("CaptureZodiacSignIntent")(handler_input)
+        
+    def filter(self, X):
+        date = X.split()
+        month = date[0]
+        month_as_index = list(calendar.month_abbr).index(month[:3].title())
+        day = int(date[1])
+        return (month_as_index,day)
 
     def handle(self, handler_input):
         slots = handler_input.request_envelope.request.intent.slots
         year = slots["year"].value
         month = slots["month"].value
         day = slots["day"].value
+
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSe2IkvCKagdC5ARC_p_BW95_vKs8O2I0Emh_EMilrX_elyAlF60tsx_4kTaOabvw/pub?gid=1283308611&single=true&output=csv"
+        csv_content = requests.get(url).content
+        df = pd.read_csv(io.StringIO(csv_content.decode('utf-8')))
+        zodiac= ""
+        month_as_index = list(calendar.month_abbr).index(month[:3].title())
+        usr_dob = (month_as_index, int(day))
+        text = df['Zodiac'].iloc[0]
+        for index, row in df.iterrows():
+            if self.filter(row['Start']) <= usr_dob <= self.filter(row["End"]):
+                zodiac = row['Zodiac']
+        #speak_output = text
+        speak_output = "I see you were born on the {day} of {month} {year},  {zodiac}.".format(month=month,day=day,year=year,zodiac=zodiac)
         
-        speak_output = "Hello World!"
 
         return (
             handler_input.response_builder
                 .speak(speak_output)
-                # .ask("add a reprompt if you want to keep the session open for the user to respond")
+                .ask(speak_output)
                 .response
         )
 
